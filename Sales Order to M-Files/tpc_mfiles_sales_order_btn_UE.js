@@ -2,7 +2,9 @@
  * @NApiVersion 2.1
  * @NScriptType UserEventScript
  */
-define(['N/https', 'N/log', 'N/record',"N/ui/serverWidget"], function (https, log, record,serverWidget) {
+
+define(["N/https","N/log","N/record","N/ui/serverWidget"], function (https, log, record,serverWidget) {
+
     function beforeLoad(context) {
         try {
           if (context.type !== context.UserEventType.VIEW) return;
@@ -11,8 +13,8 @@ define(['N/https', 'N/log', 'N/record',"N/ui/serverWidget"], function (https, lo
           var rec = context.newRecord;
     
           // Adjust these to your actual field IDs
-          var webFieldId = 'custbody_tpc_mfiles_opportunity_link';         // web URL
-          var desktopFieldId = 'custbody_tpc_mfiles_opp_link_desktop';     // desktop url
+          var webFieldId = 'custbody_tpc_so_to_mfiles_link';         // web URL
+          var desktopFieldId = 'custbody_tpc_so_to_mfiles_link_desktop';     // desktop url
     
           var webUrl = rec.getValue({ fieldId: webFieldId }) || '';
           var desktopUrl = rec.getValue({ fieldId: desktopFieldId }) || '';
@@ -22,10 +24,10 @@ define(['N/https', 'N/log', 'N/record',"N/ui/serverWidget"], function (https, lo
           var desktopJson = JSON.stringify(desktopUrl);
             
         
-          form.getField({ id: 'custbody_tpc_mfiles_opportunity_link' }).updateDisplayType({
+          form.getField({ id: 'custbody_tpc_so_to_mfiles_link' }).updateDisplayType({
             displayType: serverWidget.FieldDisplayType.HIDDEN
           });
-          form.getField({ id: 'custbody_tpc_mfiles_opp_link_desktop' }).updateDisplayType({
+          form.getField({ id: 'custbody_tpc_so_to_mfiles_link_desktop' }).updateDisplayType({
             displayType: serverWidget.FieldDisplayType.HIDDEN
           });
           
@@ -45,7 +47,7 @@ define(['N/https', 'N/log', 'N/record',"N/ui/serverWidget"], function (https, lo
             htmlFld.updateLayoutType({
             layoutType: serverWidget.FieldLayoutType.OUTSIDEABOVE
           });
-        
+          
     
           // Inline HTML + JS modal. Keep it self-contained and non-invasive.
           var html = ''
@@ -138,124 +140,120 @@ define(['N/https', 'N/log', 'N/record',"N/ui/serverWidget"], function (https, lo
           log.error({ title: 'M-Files dialog injection error', details: err });
         }
       }
+
     function afterSubmit(context) {
         try {
-            if (context.type !== context.UserEventType.CREATE) return;
+            if (context.type !== context.UserEventType.CREATE ) return;
 
-            const recId = context.newRecord.id;
             const recType = context.newRecord.type;
+            const recId = context.newRecord.id;
 
-            // Only run for Opportunity  
-            if (recType !== record.Type.OPPORTUNITY) return;
-
-            log.debug("AfterSubmit Triggered", `Type: ${recType}, ID: ${recId}`);
-
-            // Loading full record
-            let fullRec = record.load({
+            const rec = record.load({
                 type: recType,
                 id: recId
             });
 
-            // M-Files link field
-            let linkField = 'custbody_tpc_mfiles_opportunity_link';
-            let existingLink = fullRec.getValue({ fieldId: linkField });
-            if (existingLink && existingLink.trim() !== '') {
-                log.debug("Already linked to M-Files", existingLink);
+            var nsLinkField = "custbody_tpc_so_to_mfiles_link";
+
+            // ✅ Skip if already linked to M-Files
+            if (rec.getValue(nsLinkField)) {
+                log.debug("Skipping M-Files sync", "Record already has a link: " + rec.getValue(nsLinkField));
                 return;
             }
 
-            // Collect values
-            const tranId = fullRec.getValue({ fieldId: 'tranid' });
-            const entityId = fullRec.getValue({ fieldId: 'entity' });
-            const entityName = fullRec.getText({ fieldId: 'entity' }) || 'Unknown Company';
-            const entityWithId = `${entityName} - ${entityId}`;
-            const objectValue = `${tranId} ${entityName}`;
+            let tranid = rec.getValue("tranid");
+            let entityid = rec.getValue("entity");
+            let customerName = rec.getText("entity") || "Unknown Company";
+            let salesOrderName = `${tranid} - ${customerName}`;
+            const CustomerNameWithId = `${customerName} - ${entityid}`;
 
-            log.debug("Record Values", { tranId, entityName, entityWithId, objectValue });
+            log.debug("Sales Order Name: ", salesOrderName);
 
-            //  Authenticate to M-Files 
-            let payload = { 
+            const payload = {
                 Username: 'NS-MFiles',
                 Password: 'CleanAirRocks!',
                 VaultGuid: '{05931937-E22E-488F-BDC9-F4EE366370F4}',
                 Expiration: "2027-09-30T10:36:29Z"
             };
 
-            let tokenResponse = https.post({
+            const tokenResponse = https.post({
                 url: 'https://mfiles.cleanairproducts.com/REST/server/authenticationtokens',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
-            let token = JSON.parse(tokenResponse.body).Value;
+            const token = JSON.parse(tokenResponse.body).Value;
             log.debug("M-Files Token", token);
 
-            // === Create Opportunity in M-Files ===
-            let createResponse = createInMFiles(token, "OT.NsOpportunity", "CL.NSOpportunity", [
-                { "PropertyDef": "0", "Value": objectValue },
-                { "PropertyDef": "PD.NsCompany", "Value": entityWithId }
-            ]);
+            let objectType, objectClass, objectName;
+            let properties = [];
 
-            // If fails → create company first then retry
-            if (createResponse.Error && createResponse.Error.HasError) {
-                log.debug("Creation failed, creating company", createResponse.Error.ErrorMessage);
+            objectType = "OT.NsSalesOrder";
+            objectClass = "CL.NsSalesOrder";
+            
+            objectName = salesOrderName;
 
-                createInMFiles(token, "OT.NsCompany", "CL.NsCompany", [
-                    { "PropertyDef": "0", "Value": entityWithId }
+            properties.push({ "PropertyDef": "0", "Value": objectName });
+            properties.push({ "PropertyDef": "PD.NsCompany", "Value": CustomerNameWithId });
+
+            let response = createInMFiles(token, objectType, objectClass, properties);
+
+            if (response && response.Error?.HasError) {
+                log.debug("Sales Order creation failed, creating Company...", response.Error.ErrorMessage);
+
+                let companyResponse = createInMFiles(token, "OT.NsCompany", "CL.NsCompany", [
+                    { PropertyDef: "0", Value: CustomerNameWithId }
                 ]);
 
-                createResponse = createInMFiles(token, "OT.NsOpportunity", "CL.NSOpportunity", [
-                    { "PropertyDef": "0", "Value": objectValue },
-                { "PropertyDef": "PD.NsCompany", "Value": entityWithId }
-                ]);
+                log.debug("Company creation response", companyResponse);
+
+                // Retry Sales Order after company creation
+                response = createInMFiles(token, objectType, objectClass, properties);
             }
 
-            if (createResponse && !createResponse.Error?.HasError) {
-                let mfilesUrl = createResponse.WebClientUrl;
-                let mfilesDesktopUrl = createResponse.DesktopClientUrl;
+            
+            if (response && !response.Error?.HasError) {
+                const mfUrl = response.WebClientUrl;
 
-                fullRec.setValue({
-                    fieldId: linkField,
-                    value: mfilesUrl
+                rec.setValue({
+                    fieldId: nsLinkField,
+                    value: mfUrl
                 });
-                fullRec.setValue({
-                    fieldId: 'custbody_tpc_mfiles_opp_link_desktop',
-                    value: mfilesDesktopUrl
-                })
+                rec.save({ enableSourcing: false, ignoreMandatoryFields: true });
 
-                fullRec.save();
-
-                log.debug("Updated Opportunity with M-Files Links", {
-                    Web: mfilesUrl,
-                    Desktop: mfilesDesktopUrl
-                });
+                log.debug(`Updated NS ${recType} with M-Files URL`, mfUrl);
             } else {
-                log.error("M-Files creation failed", JSON.stringify(createResponse));
+                log.error(`${recType} creation failed after retry`, JSON.stringify(response));
             }
 
-        } catch (e) {
-            log.error("afterSubmit Error", e.message);
+        } catch (error) {
+            log.error({
+                title: "Error in Sales Order after Submit function",
+                details: error.message || error
+            });
         }
     }
 
     function createInMFiles(token, objectType, objectClass, properties) {
-        let response = https.post({
+        var response = https.post({
             url: "https://mfiles.cleanairproducts.com/REST/vault/extensionmethod/CreateObject",
             headers: {
                 "X-Authentication": token,
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                "APIKey": "",
-                "ObjectType": objectType,
-                "Class": objectClass,
-                "Properties": properties
+                APIKey: "",
+                ObjectType: objectType,
+                Class: objectClass,
+                Properties: properties
             })
         });
 
-        log.debug(`M-Files create response (${objectType})`, response.body);
+        log.debug("M-Files create response (" + objectType + ")", response.body);
         return JSON.parse(response.body);
     }
 
-    return {  beforeLoad , afterSubmit };
+    return {
+        beforeLoad , afterSubmit
+    };
 });
