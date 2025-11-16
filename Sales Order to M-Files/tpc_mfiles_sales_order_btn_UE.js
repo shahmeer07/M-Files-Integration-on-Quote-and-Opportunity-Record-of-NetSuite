@@ -170,10 +170,10 @@ define(["N/https","N/log","N/record","N/ui/serverWidget"], function (https, log,
             log.debug("Sales Order Name: ", salesOrderName);
 
             const payload = {
-                Username: 'NS-MFiles',
-                Password: 'CleanAirRocks!',
-                VaultGuid: '{05931937-E22E-488F-BDC9-F4EE366370F4}',
-                Expiration: "2027-09-30T10:36:29Z"
+                Username: '',
+                Password: '',
+                VaultGuid: '{}',
+                Expiration: ""
             };
 
             const tokenResponse = https.post({
