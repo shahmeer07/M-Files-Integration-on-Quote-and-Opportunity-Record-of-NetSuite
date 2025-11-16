@@ -175,14 +175,14 @@ define(['N/https', 'N/log', 'N/record',"N/ui/serverWidget"], function (https, lo
 
             //  Authenticate to M-Files 
             let payload = { 
-                Username: 'NS-MFiles',
-                Password: 'CleanAirRocks!',
-                VaultGuid: '{05931937-E22E-488F-BDC9-F4EE366370F4}',
-                Expiration: "2027-09-30T10:36:29Z"
+                Username: '',
+                Password: '',
+                VaultGuid: '',
+                Expiration: ""
             };
 
             let tokenResponse = https.post({
-                url: 'https://mfiles.cleanairproducts.com/REST/server/authenticationtokens',
+                url: '',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
