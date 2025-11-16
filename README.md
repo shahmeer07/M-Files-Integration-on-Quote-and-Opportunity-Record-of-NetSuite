@@ -1,6 +1,6 @@
 ### 📘 M-Files Integration on Quote & Opportunity Records for NetSuite
 Automated M-Files Object Creation • Email Sync • Inline Launch UI
-<p align="center"> <img src="https://i.imgur.com/2lF8zVq.png" width="580"> </p>
+![Banner](https://dummyimage.com/1100x220/1d1d1d/ffffff&text=M-FIles+Integration)
 📦 Overview
 
 ### This repository contains a complete, two-part integration framework between NetSuite and M-Files, enabling:
