@@ -1,4 +1,4 @@
-### 📘 M-Files Integration on Quote & Opportunity Records for NetSuite
+### 📘 M-Files Integration 
 Automated M-Files Object Creation • Email Sync • Inline Launch UI
 
 📦 Overview
